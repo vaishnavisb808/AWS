@@ -1,0 +1,116 @@
+import boto3
+import pandas as pd
+from pandas import DataFrame
+import json
+import numpy as np
+import datetime
+import constants
+from confluent_kafka import Producer
+ 
+s3_client = boto3.client("s3")
+
+#KAFKA_TOPIC=constants.ENTERPRISE+"-"+constants.CHANNEL+"-"+constants.FEED_NAME
+KAFKA_TOPIC="Test-topic"
+KAFKA_BROKER = 'b-1.enskafka.cjocb4.c2.kafka.eu-west-2.amazonaws.com:9092,b-2.enskafka.cjocb4.c2.kafka.eu-west-2.amazonaws.com:9092,b-3.enskafka.cjocb4.c2.kafka.eu-west-2.amazonaws.com:9092'
+
+producer = Producer({
+    'bootstrap.servers': KAFKA_BROKER,
+    'socket.timeout.ms': 100,
+    'api.version.request': 'false',
+    'broker.version.fallback': '0.9.0',
+    'message.max.bytes': 1000000000
+})
+
+def lambda_handler(event, context):
+    bucket_name=event.get('bucket_name')
+    key=event.get('key') #  object key
+    sale_data=s3_processing(bucket_name,key)
+    print(sale_data)
+   #data=aggregation(sale_data)
+    data=transform(sale_data)
+    print(json.dumps(data,sort_keys=True, indent=4))
+    status= publish_data(KAFKA_TOPIC,data)
+    if status==True:
+        return json.dumps({"status":"true","message":"Success"})
+    else:
+        return json.dumps({"status":"false","message":"Failed"})    
+   
+    
+#s3 file processing method
+def s3_processing(bucket_name,key):
+    file_content = s3_client.get_object(Bucket=bucket_name, Key=key)
+    df = pd.read_csv(file_content['Body'],sep=',')
+    sale_list =json.loads(df.to_json(orient="records"))
+    return sale_list
+ 
+#aggregate function    
+def aggregation(data):
+    pass
+    
+
+""" sale data transformation method
+    param list of sales data """
+ 
+def transform(sale_data):
+    cdm_data={}
+    sale_list=[]
+    generic_data={} 
+    for i,row in enumerate(sale_data):
+        qty = row['QTY']
+        val = row['VAL']
+        barcode = row['BARCODE']
+        date = row['DATE']
+        store = row['STORE']
+        #print (store, qty,val,barcode,date)
+        sale_object={}
+        ct = datetime.datetime.now()
+        if int(qty)<0:
+            sale_object["transactionTypeCode"]=constants.FEEDTYPE.RETURN.value
+        else:
+            sale_object["transactionTypeCode"]=constants.FEEDTYPE.SALES.value
+        sale_object["transactionNo"]=ct.timestamp()
+        sale_object["transactionLine"]=i+1
+        sale_object["transactionDate"]=date
+        sale_object["locationCode"]= store;
+        sale_object["UPCNo"]= barcode
+        sale_object["Units"]= qty
+        sale_object["soldPrice"]= val
+        sale_object["vendorCode"]= "null"
+        sale_object["vendorStyle"]= "null"
+        sale_object["styleCode"]= "null"
+        sale_object["colorCode"]= "null"
+        sale_object["sizeCode"]= "null"
+        sale_object["discountTypeCode"]= "null"
+        sale_object["discountAmount"]= "null"
+        sale_object["originatingLocationCode"]= "null"
+        sale_object["creditOriginatingStore"]= "null"
+        sale_object["serialNo"]= "null"
+        sale_object["inventpryIdentificationNo"]= "null"
+        sale_list.append(sale_object)
+
+    generic_data['enterprise']=constants.ENTERPRISE
+    generic_data['channel']=constants.CHANNEL
+    generic_data['timestamp']=ct.timestamp()
+    generic_data['version']="1"
+    generic_data['feed']=constants.CHANNEL+"-"+constants.FEED_NAME
+    cdm_data['metadata'] =generic_data
+    cdm_data['salesandreturns'] =sale_list
+    return cdm_data
+        
+def delivery_report(err, msg):
+    if err is not None:
+        print('Message delivery failed: {}'.format(err))
+    else:
+        print('Message delivered to {} [{}]'.format(
+            msg.topic(), msg.partition()))
+
+
+def publish_data(data,topic):
+    try:
+        msg_json_str = str(json.dumps(data))
+        producer.produce(data,topic, msg_json_str.encode('utf-8'), callback=delivery_report)
+        producer.flush()
+        return True
+    except Exception as ex:
+        print("Error : ", ex)    
+        return False

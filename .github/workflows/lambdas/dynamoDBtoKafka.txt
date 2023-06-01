@@ -1,0 +1,59 @@
+import json
+import boto3
+from confluent_kafka import Producer
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('testS3Dynamo')
+columnName = 'activationFlag'
+columnValue = 'Yes'
+
+KAFKA_TOPIC = 'new-topic'
+KAFKA_BROKER = 'b-2.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-1.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-3.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092'
+
+def lambda_handler(event, context):
+    response = table.scan()
+    print("response scan")
+    for item in response['Items']:
+        if publish_data(item, KAFKA_BROKER, KAFKA_TOPIC):
+            update_column(item['transactionLine'], columnName, columnValue)
+
+def delivery_report(err, msg):
+    if err is not None:
+        print('Message delivery failed: {}'.format(err))
+    else:
+        print('Message delivered to {} [{}]'.format(
+            msg.topic(), msg.partition()))
+
+def publish_data(data, broker, topic):
+    producer = Producer({
+        'bootstrap.servers': broker,
+        'socket.timeout.ms': 100,
+        'api.version.request': 'false',
+        'message.max.bytes': 1000000000
+    })
+    try:
+        producer.produce(topic, json.dumps(data).encode('utf-8'), callback=delivery_report)
+        producer.flush()
+        return True
+    except Exception as ex:
+        print("Error: ", ex)
+        return False
+
+def update_column(item_id, column_name, column_value):
+    table_data = dynamodb.Table('testS3Dynamo')  # Replace 'testS3Dynamo' with your actual table name
+    try:
+        response = table_data.update_item(
+            Key={
+                'transactionLine': item_id
+            },
+            UpdateExpression='SET #col = :val',
+            ExpressionAttributeNames={
+                '#col': column_name
+            },
+            ExpressionAttributeValues={
+                ':val': column_value
+            }
+        )
+        print(f"Updated column '{column_name}' with value '{column_value}' for item with primary key TransactionLine '{item_id}'")
+    except Exception as e:
+        print(f"Error updating column: {e}")

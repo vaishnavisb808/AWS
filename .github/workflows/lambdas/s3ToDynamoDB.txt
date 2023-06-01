@@ -1,0 +1,43 @@
+import json
+import boto3
+
+s3_client = boto3.client("s3")
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('testS3Dynamo')
+
+
+def lambda_handler(event, context):
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    s3_file_name = event['Records'][0]['s3']['object']['key']
+    resp = s3_client.get_object(Bucket = bucket_name, Key = s3_file_name)
+    data = resp['Body'].read().decode("utf-8")
+    sales = data.split("\n")
+    for sale in sales:
+        sale_data = sale.split(",")
+        # print(sale_data)
+        try:
+            table.put_item(
+                    Item={
+                        "transactionLine": sale_data[0],
+                        "locationCode" : sale_data[1],
+                        "transacionDate" :sale_data[2],
+                        "upcCode" : sale_data[3],
+                        "ProductNumber" : sale_data[4],
+                        "itemNumber" : sale_data[5],
+                        "qty" :sale_data[6],
+                        "MSRP" : sale_data[7],
+                        "activationFlag" : "No"
+                        }
+                )
+            # print("end of file, Index erro")
+        except Exception as e:
+            response = {
+                  'statusCode': 200,
+                  'body': 'successfully created item!, exception because end of file',
+                  'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                  }
+            }
+            return response

@@ -1,0 +1,41 @@
+import json
+import boto3
+
+client = boto3.client('dynamodb')
+
+# insert values to db
+# def lambda_handler(event, context):
+#   data= client.scan(TableName = 'test_kafka')
+  
+#   response = {
+#     'statusCode' : 200,
+#     'body' : json.dumps(data),
+#     'headers' : {
+#       'Content-Type' : 'application/json',
+#       'Access-Control-Allow-Origin' : '*'
+#     }
+#   }
+#   return response
+  
+  # get values from db
+def lambda_handler(event, context):
+  data= client.put_item(
+    TableName = 'test_kafka',
+    Item = {
+      'no' : {
+        'N': '1'
+            },
+      'name' : {
+        'S' : 'bbb'
+              }
+          }
+  )
+  response = {
+    'statusCode' : 200,
+    'body' : 'new item added successfully ',
+    'headers' : {
+      'Content-Type' : 'application/json',
+      'Access-Control-Allow-Origin' : '*'
+    }
+  }
+  return response

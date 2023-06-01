@@ -1,0 +1,56 @@
+import json
+from confluent_kafka import Consumer, KafkaException
+
+
+def lambda_handler(event, context):
+    # Kafka consumer configuration
+    bootstrap_servers = 'b-2.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-1.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-3.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092'
+    topic = 'new-topic'
+    group_id = '458cfad9-eab3-460f-baf6-7c2e882517c5-2'
+
+    # Create Kafka consumer configuration
+    conf = {
+        'bootstrap.servers': bootstrap_servers,
+        'group.id': group_id,
+        'auto.offset.reset': 'earliest',
+        'enable.auto.commit': 'false',
+        'default.topic.config': {'auto.offset.reset': 'smallest'}
+    }
+
+    # Create Kafka consumer
+    consumer = Consumer(conf)
+    consumer.subscribe([topic])
+
+    try:
+        while True:
+            # Poll for new messages
+            message = consumer.poll(timeout=3.0)
+
+            if message is None:
+                continue
+            if message.error():
+                if message.error().code() == KafkaException._PARTITION_EOF:
+                    # End of partition event
+                    continue
+                else:
+                    print(f"Error occurred: {message.error().str()}")
+                    break
+
+            # Process the received message
+            process_message(message)
+
+        consumer.close()
+
+    except KeyboardInterrupt:
+        consumer.close()
+
+
+def process_message(message):
+    # Convert the message value to a string (assuming the message is in JSON format)
+    message_value = message.value().decode('utf-8')
+
+    # Parse the message as JSON
+    message_json = json.loads(message_value)
+
+    # Process the message according to your requirements
+    print(f"Received message: {message_json}")

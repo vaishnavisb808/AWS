@@ -1,0 +1,154 @@
+import csv, time
+import json
+import boto3
+import botocore.response
+import threading
+from confluent_kafka import Producer
+
+
+# MINIMUN_REMAINING_TIME_MS = 10000
+KAFKA_TOPIC="ens-test-topic"
+# threads = []
+KAFKA_BROKER='b-2.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-1.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092,b-3.ensmsk.70lsne.c2.kafka.eu-west-2.amazonaws.com:9092'
+
+producer = Producer({
+    'bootstrap.servers': KAFKA_BROKER,
+    'socket.timeout.ms': 100,
+    'api.version.request': 'false',
+    'message.max.bytes': 1000000000,
+    'queue.buffering.max.messages': 1000000,
+    'queue.buffering.max.ms': 1000
+})
+
+def lambda_handler(event, context):
+    time1 = time.time()
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    object_key = event['Records'][0]['s3']['object']['key']
+    offset = event.get('offset', 0)
+    fieldnames = event.get('fieldnames', None)
+    s3_resource = boto3.resource('s3')
+    s3_object = s3_resource.Object(bucket_name=bucket_name, key=object_key)
+    data = s3_object.get()['Body'].read().decode('utf-8').splitlines()
+    # bodylines = get_object_bodylines(s3_object, offset)
+    
+    # print(bodylines)
+
+    csv_reader = csv.DictReader(data, fieldnames=fieldnames)
+    next(csv_reader)
+    count = 0
+    for row in csv_reader:
+        
+        # if count == 1900:
+        #     break
+            
+        # row['transactionLine'] = count + 1
+        count+=1
+        # data = {
+        #     "metadata":{"filename":object_key},
+        #     "data": row
+        # }
+        
+        data = {
+            "ProductNumber":row.get('ProductNumber'),
+            "MSRP": row.get('MSRP')
+        }
+        
+        print(count)
+        
+        
+                
+        #     fieldnames = csv_reader.fieldnames
+
+        # new_offset = offset + bodylines.offset
+        # if new_offset < s3_object.content_length:
+        #     new_event = {
+        #         **event,
+        #         "offset": new_offset,
+        #         "fieldnames": fieldnames
+        #     }
+        #     invoke_lambda(context.function_name, new_event)
+        #     print(count)        
+        
+        
+        # thread = threading.Thread(target=publish_data, args=(data, KAFKA_TOPIC))
+        publish_data(data, KAFKA_TOPIC)
+        # threads.append(thread)
+        # thread.start()
+    
+    # print(count)
+    # for t in threads:
+    #     t.join()
+    print(count)
+    producer.flush()
+    print(time.time()-time1)
+
+    return
+
+
+# def invoke_lambda(function_name, event):
+#     payload = json.dumps(event).encode('utf-8')
+#     print(payload)
+#     client = boto3.client('lambda')
+#     response = client.invoke(
+#         FunctionName=function_name,
+#         InvocationType='Event',
+#         Payload=payload
+#     )
+
+def get_object_bodylines(s3_object, offset):
+    resp = s3_object.get(Range=f'bytes={offset}-')
+    body: botocore.response.StreamingBody = resp['Body']
+    return BodyLines(body)
+
+class BodyLines:
+    def __init__(self, body: botocore.response.StreamingBody, initial_offset=0):
+        self.body = body
+        self.offset = initial_offset
+
+    def iter_lines(self, chunk_size=5000):
+        """Return an iterator to yield lines from the raw stream.
+        This is achieved by reading chunk of bytes (of size chunk_size) at a
+        time from the raw stream, and then yielding lines from there.
+        """
+        pending = b''
+        for chunk in self.body.iter_chunks(chunk_size):
+            lines = (pending + chunk).splitlines(True)
+            for line in lines[:-1]:
+                self.offset += len(line)
+                yield line.decode('utf-8')
+            pending = lines[-1]
+        if pending:
+            self.offset += len(pending)
+            yield pending.decode('utf-8')
+
+def publish_data(data, topics):
+    
+    def delivery_report(err, msg):
+        if err is not None:
+            print('Message delivery failed: {}'.format(err))
+        # else:
+            # print('Message delivered to {} [{}]'.format(msg.topic(), msg.partition()))
+
+    def produce_data(producer, topic, data):
+        try:
+            producer.produce(topic, json.dumps(data).encode('utf-8'), callback=delivery_report)
+            producer.poll(1)
+        except Exception as ex:
+            print("Error : ", ex)
+
+            
+            
+    produce_data(producer, topics, data)
+
+    # for i in range(num_threads):
+    #     producer = Producer({
+    #         'bootstrap.servers': broker,
+    #         'socket.timeout.ms': 100,
+    #         'api.version.request': 'false',
+    #         'message.max.bytes': 1000000000,
+    #         'queue.buffering.max.messages': 1000000,
+    #         'queue.buffering.max.ms': 1000
+    #     })
+    #     thread = threading.Thread(target=produce_data, args=(producer, topics, data))
+    #     threads.append(thread)
+    #     thread.start()

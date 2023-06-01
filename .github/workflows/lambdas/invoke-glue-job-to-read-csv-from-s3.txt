@@ -1,0 +1,38 @@
+import boto3
+
+s3_client = boto3.client("s3")
+S3_BUCKET = 'adarsh-practice-bucket'
+  
+def lambda_handler(event, context):
+    object_key = "test_csv_data.csv"
+    file_content = s3_client.get_object(
+        Bucket=S3_BUCKET, Key=object_key)["Body"].read()
+    print(file_content)
+
+---------------------------------------------------------------
+import json
+import boto3
+
+def lambda_handler(event, context):
+    # Get the S3 bucket and key information from the event
+    s3_bucket = 'glue-job-read-csv-from-s3'
+    s3_key = 'data/test.csv'
+
+    # Create a Glue client
+    glue_client = boto3.client('glue')
+
+    # Specify the Glue job name
+    job_name = 'csv-from-s3'
+
+    # Start the Glue job
+    response = glue_client.start_job_run(
+        JobName=job_name,
+        Arguments={
+            '--bucket_name': s3_bucket,
+            '--s3_key': s3_key
+        }
+    )
+
+    # Print the response
+    print(response)
+
