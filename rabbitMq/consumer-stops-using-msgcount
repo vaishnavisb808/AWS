@@ -1,0 +1,66 @@
+import pika
+import boto3
+
+ 
+
+def lambda_handler(event, context):
+    rabbitmq_host = "35.178.200.222"
+    rabbitmq_port = 5672
+    rabbitmq_user = "rabbitmquser"
+    rabbitmq_pass = "Welcome@123"
+    queue_name = "aws-queue-1"
+    consumer_timeout = 100
+    max_messages = 50000  # Maximum number of messages to consume
+
+ 
+
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host=rabbitmq_host, port=rabbitmq_port, credentials=pika.PlainCredentials(rabbitmq_user, rabbitmq_pass))
+    )
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name)
+
+ 
+
+    message_count = 0  # Counter for processed messages
+
+ 
+
+    def callback(ch, method, properties, body):
+        nonlocal message_count
+
+ 
+
+        # Process the received message
+        print("Received message:", body)
+
+ 
+
+        message_count += 1
+        if message_count >= max_messages:
+            # Stop consuming messages
+            channel.stop_consuming()
+
+ 
+
+        # Acknowledge the message manually
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
+ 
+
+    # Start consuming messages from the queue
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
+
+ 
+
+    try:
+        # Consume messages until the maximum message count is reached
+        channel.start_consuming()
+    except KeyboardInterrupt:
+        # Gracefully stop consuming if interrupted
+        channel.stop_consuming()
+
+ 
+
+    # Close the connection
+    connection.close()
