@@ -1,0 +1,114 @@
+import pika
+
+import boto3
+
+import json
+
+ 
+
+def lambda_handler(event, context):
+
+
+    # Extract the necessary connection parameters
+
+    rabbitmq_host = "35.178.200.222"
+
+    rabbitmq_port = 5672  # Default RabbitMQ port
+
+    rabbitmq_user = "rabbitmquser"
+
+    rabbitmq_pass = "Welcome@123"
+
+
+    # Create a connection to RabbitMQ
+
+    parameters = pika.ConnectionParameters(host=rabbitmq_host, port=rabbitmq_port,
+
+                                           credentials=pika.PlainCredentials(rabbitmq_user, rabbitmq_pass))
+
+    connection = pika.BlockingConnection(parameters)
+
+
+    # Create a channel
+
+    channel = connection.channel()
+
+
+    # Declare a queue
+
+    queue_name = "aws-queue-1"
+
+    channel.queue_declare(queue=queue_name)
+
+
+    # Define a callback function for consuming messages
+
+    def callback(ch, method, properties, body):
+
+
+        # Process the received message
+
+        message = body.decode('utf-8').split(',')
+
+
+        # Create a dictionary from the message fields
+
+        json_data = {
+
+            'transactionLine': message_list[0],
+
+            'sale-return': message_list[1],
+
+            'productCode': message_list[2],
+
+            'storeNumber': message_list[3],
+
+            'price': message_list[4],
+
+            'locationCode': message_list[5],
+
+            'unit': message_list[6],
+
+            'actualPrice' : message_list[7]
+
+            # Add more fields as needed
+
+        }
+
+
+        # # Convert the dictionary to JSON
+
+        json_message = json.dumps(json_data)
+
+
+        # Print the JSON-formatted message
+
+        print("Received message (JSON format):", json_message)
+
+        # print("received message", message)
+
+        # # # Acknowledge the message
+
+        # ch.basic_ack(delivery_tag=method.delivery_tag)
+
+
+    # Start consuming messages from the queue
+
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+
+
+    # Start a timer for the consumer timeout
+
+    consumer_timeout = 100  # Set the desired timeout duration in seconds
+
+    timeout_expiration = context.get_remaining_time_in_millis() - 2000  # Subtract some buffer time
+
+
+    while context.get_remaining_time_in_millis() > timeout_expiration:
+
+        connection.process_data_events()
+
+
+    # Close the connection
+
+    connection.close()
