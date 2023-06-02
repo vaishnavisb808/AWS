@@ -1,3 +1,3 @@
-when tried to use rabbitmq - RabbitMQ 3.11.16 and Erlang 26 versions it was not working , so i changed to Erlang 25.3.2. then got working.
+1. when tried to use rabbitmq - RabbitMQ 3.11.16 and Erlang 26 versions it was not working , so i changed to Erlang 25.3.2. then got working.
  i have added this answer to stackoverflow who faced same issues, but not sure, if that solution will solve their probelem.
- After solving the version isues then i faced issue with th rabbitMQ permissions, added the reuired permission to the user in Admin tab for the user.
+2. After solving the version isues then i faced issue with th rabbitMQ permissions, added the reuired permission to the user in Admin tab for the user.
